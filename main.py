@@ -4,6 +4,7 @@ import requests
 import time
 import json
 import datetime
+from zoneinfo import ZoneInfo  # เพิ่มไว้ด้านบน
 
 # ดึงค่าจาก Environment Variables
 TOKEN    = os.environ['TOKEN']
@@ -40,7 +41,9 @@ def add_schedule(time_str, message):
     save_schedule(lst)
 
 def check_and_notify():
-    now = datetime.datetime.now().strftime('%H:%M')
+    # ใช้เวลาไทย (Asia/Bangkok)
+    now = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).strftime('%H:%M')
+    
     lst = load_schedule()
     for event in lst:
         if event['time'] == now and CHAT_ID:
@@ -52,7 +55,7 @@ def handle_message(msg):
     CHAT_ID = msg['chat']['id']
 
     if text == '/start':
-        send_message(CHAT_ID, "👋 สวัสดีครับ! บอทตารางงานพร้อมใช้แล้ว\nใช้ /add HH:MM ข้อความ  เพิ่มงาน\nใช้ /list ดูรายการงาน\nใช้ /remove N ลบงานลำดับที่ N")
+        send_message(CHAT_ID, "👋 สวัสดีครับ! บอทตารางงานพร้อมใช้แล้ว\nใช้ /add HH:MM ข้อความ เช่น 09:00 แก้ไขโค้ดในRobloxStudio  เพิ่มงาน\nใช้ /list ดูรายการงาน\nใช้ /remove N ลบงานลำดับที่ N")
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ',1)
