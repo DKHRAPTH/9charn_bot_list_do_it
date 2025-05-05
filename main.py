@@ -29,9 +29,15 @@ def send_message(chat_id, text):
 def load_schedule():
     try:
         with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = f.read().strip() 
+            if not data:
+                return {} 
+            return json.loads(data)
     except FileNotFoundError:
-        return []
+        return {}  
+    except json.JSONDecodeError:
+        return {}  
+
 
 def save_schedule(lst):
     with open(SCHEDULE_FILE, 'w', encoding='utf-8') as f:
