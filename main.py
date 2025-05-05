@@ -69,7 +69,7 @@ def handle_message(msg):
     elif text == '/list':
         lst = load_schedule()
         if lst:
-            lines = [f"{i+1}. {e['time']} → {e['message']}" for i,e in enumerate(lst)]
+            lines = [f"ตารางงานทั้งหมด มีดังนี้\n{i+1}. {e['time']} → {e['message']}" for i,e in enumerate(lst)]
             send_message(CHAT_ID, "\n".join(lines))
         else:
             send_message(CHAT_ID, "📭 ยังไม่มีงานในตาราง")
@@ -95,4 +95,4 @@ while True:
         if 'message' in u:
             handle_message(u['message'])
     check_and_notify()
-    time.sleep(60)
+    time.sleep(15)
