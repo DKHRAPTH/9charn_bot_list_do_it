@@ -18,8 +18,10 @@ def get_updates():
     resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
     data = resp.json()
     if data.get('ok'):
-        return data['result']
-    return []
+        for update in data['result']:
+            LAST_UPDATE_ID = update['update_id']
+            handle_message(update['message'])
+    return data['result']
 
 def send_message(chat_id, text):
     requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
