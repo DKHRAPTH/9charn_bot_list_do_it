@@ -194,8 +194,9 @@ def handle_message(msg):
         if not lst:
             send_message(chat_id, "[ 🤖 ] ไม่มีรายการให้ลบ")
         else:
+            lines = [f"{i+1}. {e['time']} → {e['message']}" for i, e in enumerate(lst)]
             user_waiting_for_remove[chat_id] = 'awaiting_remove'
-            send_message(chat_id, "[ 🤖 ] กรุณาพิมพ์หมายเลขรายการที่ต้องการลบ เช่น 1")
+            send_message(chat_id, "[ 🤖 ] กรุณาพิมพ์หมายเลขรายการที่ต้องการลบ เช่น 1\n นี่คือตารางงานของคุณที่สามารถลบได้:\n"+ "\n".join(lines))
 
     elif text == '/clear':
         lst = [e for e in load_schedule() if e['chat_id'] != chat_id]
