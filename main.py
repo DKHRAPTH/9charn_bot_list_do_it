@@ -3,11 +3,10 @@ import requests
 import time
 import json
 import datetime
-from zoneinfo import ZoneInfo  # ใช้กับ Python >= 3.9
+from zoneinfo import ZoneInfo
 from flask import Flask
 import threading
 
-# ========== Flask สำหรับ uptime ==========
 app = Flask('')
 
 @app.route('/')
@@ -19,14 +18,16 @@ def run_web():
 
 threading.Thread(target=run_web).start()
 
-# ========= Telegram Bot Config =========
+# ========== Bot config ==========
 TOKEN = os.environ['TOKEN']
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
 CHAT_ID = None
+START_TIME = time.time()
+MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
 
-# ========== ฟังก์ชันบอท ==========
+# ========== Functions ==========
 def get_updates():
     global LAST_UPDATE_ID
     resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
@@ -70,7 +71,7 @@ def handle_message(msg):
     CHAT_ID = msg['chat']['id']
 
     if text == '/start':
-        send_message(CHAT_ID, "[ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n Delay 15 s")
+        send_message(CHAT_ID, "[ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n• `/clear` ล้างรายการทั้งหมด\n\n Bot Delay 5 s")
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 1)
@@ -99,14 +100,26 @@ def handle_message(msg):
                 send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ไม่พบลำดับนั้น")
         except:
             send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /remove N")
+    elif text == '/clear':
+        save_schedule([])
+        send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
 
-# ========== Loop หลัก ==========
+# ========== Main Loop ==========
 print("🤖 Bot started...")
 while True:
     try:
         get_updates()
         check_and_notify()
-        time.sleep(15)
+
+        # ตรวจสอบเวลา runtime
+        runtime_min = (time.time() - START_TIME) / 60
+        if runtime_min > MAX_RUNTIME_MIN:
+            if CHAT_ID:
+                send_message(CHAT_ID, "[ ⚠️ ] 9CharnBot : ใกล้ถึงขีดจำกัดการใช้งานฟรีของ Railway แล้ว บอทจะปิดตัวเองเพื่อประหยัดเวลา")
+            print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
+            exit()
+
+        time.sleep(5)
     except Exception as e:
         print("❌ Error:", e)
         time.sleep(5)
