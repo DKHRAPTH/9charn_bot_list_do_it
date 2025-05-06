@@ -18,16 +18,18 @@ def run_web():
 
 threading.Thread(target=run_web).start()
 
-# ========== Config ==========
+# ========== Bot config ==========
 TOKEN = os.environ['TOKEN']
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
 START_TIME = time.time()
-MAX_RUNTIME_MIN = 29400
+MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
+
+# ========== Days of the Week ==========
 DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-# ========== Utilities ==========
+# ========== Functions ==========
 
 def get_bot_version():
     try:
@@ -42,43 +44,18 @@ def get_updates():
     data = resp.json()
     if data.get('ok'):
         for update in data['result']:
-            LAST_UPDATE_ID = update['update_id']
             if 'message' in update:
+                LAST_UPDATE_ID = update['update_id']
                 handle_message(update['message'])
             elif 'callback_query' in update:
+                LAST_UPDATE_ID = update['update_id']
                 handle_callback(update['callback_query'])
 
-def send_message(chat_id, text):
-    requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
-
-def send_message_with_buttons(chat_id, text, buttons):
-    reply_markup = {"inline_keyboard": buttons}
-    data = {
-        'chat_id': chat_id,
-        'text': text,
-        'reply_markup': json.dumps(reply_markup),
-        'parse_mode': 'Markdown'
-    }
-    requests.post(URL + 'sendMessage', data=data)
-
-def handle_callback(callback):
-    query_id = callback['id']
-    chat_id = callback['message']['chat']['id']
-    data = callback['data']
-
-    command_map = {
-        "cmd_add": "➕ /add <วัน> <เวลา> ข้อความ\nตัวอย่าง: /add Mon 19:00 ประชุม",
-        "cmd_list": "📋 /list → แสดงรายการงานทั้งหมด",
-        "cmd_remove": "❌ /remove N → ลบงานลำดับ N",
-        "cmd_clear": "🧹 /clear → ล้างรายการทั้งหมด",
-        "cmd_status": "⏱️ /status_list → ตรวจสอบสถานะแจ้งเตือน"
-    }
-
-    reply_text = command_map.get(data, "ไม่รู้จักคำสั่งนี้")
-    send_message(chat_id, reply_text)
-    requests.post(URL + 'answerCallbackQuery', data={'callback_query_id': query_id})
-
-# ========== Schedule Functions ==========
+def send_message(chat_id, text, reply_markup=None):
+    payload = {'chat_id': chat_id, 'text': text}
+    if reply_markup:
+        payload['reply_markup'] = json.dumps(reply_markup)
+    requests.post(URL + 'sendMessage', data=payload)
 
 def load_schedule():
     try:
@@ -108,41 +85,48 @@ def check_and_notify():
     updated = False
     for event in lst:
         if event['time'] == now and not event.get('notified', False):
-            send_message(event['chat_id'], f"[ 🤖 ] 9CharnBot \n🔔 แจ้งเตือน: {event['message']}")
+            send_message(event['chat_id'], f"[ 🤖 ] 9CharnBot \n🔔 ظحتَعْ تنبِيهًا: {event['message']}")
             event['notified'] = True
             updated = True
     if updated:
         save_schedule(lst)
-
-# ========== Message Handler ==========
 
 def handle_message(msg):
     text = msg.get('text', '')
     chat_id = msg['chat']['id']
 
     if text == '/start':
+        buttons = {
+            'keyboard': [[{'text': '➕ เพิ่มงาน'}]],
+            'resize_keyboard': True,
+            'one_time_keyboard': False
+        }
         send_message(chat_id,
             "[ 🤖 ] 9CharnBot is Running.... \n"
-            "👋 ยินดีต้อนรับสู่ 9CharnBot!\n"
-            "พิมพ์ /help เพื่อดูวิธีใช้งานคำสั่งต่าง ๆ\n\n"
-            f"vr. {version}"
-        )
+            "👋 أهلًا وسهلا بك!\n"
+            "جدولُك مُتوافِر \u0648أنا جاهز\n"
+            "اكتب /help لعرض كل الأوامر",
+            reply_markup=buttons)
+
+    elif text == '➕ เพิ่มงาน':
+        send_message(chat_id, "กรุณาพิมพ์ในรูปแบบ: <วัน> <เวลา> <ข้อความ>\nตัวอย่าง: Mon 19:00 ประชุม")
 
     elif text == '/help':
-        buttons = [
-            [{"text": "➕ /add", "callback_data": "cmd_add"},
-             {"text": "📋 /list", "callback_data": "cmd_list"}],
-            [{"text": "❌ /remove", "callback_data": "cmd_remove"},
-             {"text": "🧹 /clear", "callback_data": "cmd_clear"}],
-            [{"text": "⏱️ /status_list", "callback_data": "cmd_status"}]
-        ]
-        send_message_with_buttons(chat_id,
+        send_message(chat_id,
             "[ 🤖 ] 9CharnBot \n"
-            "กรุณาเลือกคำสั่งที่ต้องการใช้งาน:", buttons)
+            "📝 คำสั่ง:\n"
+            "• `/add <วัน> <เวลา> ข้อความ` เพิ่มงาน\n"
+            "• `/list` แสดงรายการของคุณ\n"
+            "• `/remove N` ลบงานลำดับ N\n"
+            "• `/clear` ล้างทั้งหมด\n"
+            "• `/status_list` ตรวจสอบสถานะแจ้งเตือน\n"
+            "📅 วัน: Mon Tue Wed Thu Fri Sat Sun\n"
+            "⏰ เวลา: 24 ชม. รูปแบบ HH:MM\n"
+            "⏳ บอทรีเฟรชทุก 1 วิ\n")
 
-    elif text.startswith('/add '):
+    elif any(day in text for day in DAYS_OF_WEEK):
         try:
-            parts = text[5:].split(' ', 2)
+            parts = text.split(' ', 2)
             day_str, time_str, message = parts[0], parts[1], parts[2]
             if day_str not in DAYS_OF_WEEK:
                 raise ValueError("Invalid day")
@@ -157,7 +141,7 @@ def handle_message(msg):
             add_schedule(chat_id, f"{next_day_str} {time_str}", message)
             send_message(chat_id, f"[ 🤖 ] 9CharnBot \n✅ เพิ่มงาน: {next_day_str} {time_str} → {message}")
         except Exception as e:
-            send_message(chat_id, f"[ 🤖 ] 9CharnBot : ❌ รูปแบบผิด /add <วัน> <เวลา> ข้อความ\nตัวอย่าง: /add Mon 19:00 ประชุม\nข้อผิดพลาด: {str(e)}")
+            send_message(chat_id, f"❌ รูปแบบไม่ถูกต้อง: <วัน> <เวลา> <ข้อความ>\nตัวอย่าง: Mon 19:00 ประชุม\nข้อผิดพลาด: {str(e)}")
 
     elif text == '/list':
         lst = [e for e in load_schedule() if e['chat_id'] == chat_id]
@@ -194,6 +178,9 @@ def handle_message(msg):
         lst = [e for e in load_schedule() if e['chat_id'] != chat_id]
         save_schedule(lst)
         send_message(chat_id, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานของคุณเรียบร้อยแล้ว")
+
+def handle_callback(query):
+    pass  # ยังไม่มี callback ใช้งานในเวอร์ชันนี้
 
 # ========== Main Loop ==========
 
