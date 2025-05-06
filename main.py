@@ -223,48 +223,4 @@ while True:
         time.sleep(1)
     except Exception as e:
         print("❌ Error:", e)
-        time.sleep(5)     
-        try:
-            idx = int(text.split()[1]) - 1
-            lst = load_schedule()
-            user_events = [e for e in lst if e['chat_id'] == chat_id]
-            if 0 <= idx < len(user_events):
-                removed = user_events[idx]
-                lst.remove(removed)
-                save_schedule(lst)
-                send_message(chat_id, f"[ 🤖 ] 9CharnBot \n🗑️ ลบ: {removed['time']} → {removed['message']}")
-            else:
-                send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ไม่พบลำดับนั้น")
-        except:
-            send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /remove N")
-
-    elif text == '/clear':
-        lst = [e for e in load_schedule() if e['chat_id'] != chat_id]
-        save_schedule(lst)
-        send_message(chat_id, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานของคุณเรียบร้อยแล้ว")
-
-def handle_callback(query):
-    pass  # ยังไม่มี callback ใช้งานในเวอร์ชันนี้
-
-# ========== Main Loop ==========
-
-version = get_bot_version()
-print(f"🤖 9CharnBot started with version: {version}")
-while True:
-    try:
-        get_updates()
-        check_and_notify()
-
-        lst = load_schedule()
-        new_lst = [e for e in lst if not e.get('notified', False)]
-        if len(new_lst) != len(lst):
-            save_schedule(new_lst)
-
-        if (time.time() - START_TIME) / 60 > MAX_RUNTIME_MIN:
-            print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
-            exit()
-
-        time.sleep(1)
-    except Exception as e:
-        print("❌ Error:", e)
         time.sleep(5)
