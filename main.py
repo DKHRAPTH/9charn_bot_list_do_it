@@ -3,11 +3,11 @@ import requests
 import time
 import json
 import datetime
-from backports.zoneinfo import ZoneInfo  # สำหรับ Python < 3.9
+from zoneinfo import ZoneInfo  # ใช้กับ Python >= 3.9
 from flask import Flask
 import threading
 
-# ========== Flask สำหรับ uptime หรือ Railway ==========
+# ========== Flask สำหรับ uptime ==========
 app = Flask('')
 
 @app.route('/')
@@ -15,14 +15,12 @@ def home():
     return "✅ Bot is running."
 
 def run_web():
-    port = int(os.environ.get('PORT', 8080))  # ใช้ PORT จาก Railway
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=8080)
 
-threading.Thread(target=run_web, daemon=True).start()
-# ======================================================
+threading.Thread(target=run_web).start()
 
 # ========= Telegram Bot Config =========
-TOKEN = os.environ['TOKEN']  # ใส่ token เป็น env บน Railway
+TOKEN = os.environ['TOKEN']
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
@@ -43,8 +41,6 @@ def send_message(chat_id, text):
     requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
 
 def load_schedule():
-    if not os.path.exists(SCHEDULE_FILE):
-        return []
     try:
         with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
             content = f.read().strip()
@@ -74,7 +70,7 @@ def handle_message(msg):
     CHAT_ID = msg['chat']['id']
 
     if text == '/start':
-        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n Delay 15 s")
+        send_message(CHAT_ID, "[ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n Delay 15 s")
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 1)
@@ -88,7 +84,7 @@ def handle_message(msg):
         lst = load_schedule()
         if lst:
             lines = [f"{i+1}. {e['time']} → {e['message']}" for i, e in enumerate(lst)]
-            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📋 ตารางงาน มีดังนี้ \n" + "\n".join(lines))
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📋 ตารางงาน:\n" + "\n".join(lines))
         else:
             send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงาน")
     elif text.startswith('/remove '):
