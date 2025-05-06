@@ -1,29 +1,52 @@
 import os
 import requests
-import json
-import threading
 import time
-import sys
-from flask import Flask, request
-from zoneinfo import ZoneInfo
+import json
 import datetime
+from backports.zoneinfo import ZoneInfo  # สำหรับ Python < 3.9
+from flask import Flask
+import threading
 
-app = Flask(__name__)
+# ========== Flask สำหรับ uptime หรือ Railway ==========
+app = Flask('')
 
-TOKEN = os.environ['TOKEN']
+@app.route('/')
+def home():
+    return "✅ Bot is running."
+
+def run_web():
+    port = int(os.environ.get('PORT', 8080))  # ใช้ PORT จาก Railway
+    app.run(host='0.0.0.0', port=port)
+
+threading.Thread(target=run_web, daemon=True).start()
+# ======================================================
+
+# ========= Telegram Bot Config =========
+TOKEN = os.environ['TOKEN']  # ใส่ token เป็น env บน Railway
 URL = f'https://api.telegram.org/bot{TOKEN}/'
+LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
 CHAT_ID = None
-
 START_TIME = time.time()
 MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
-NOTIFY_THRESHOLD_MIN = 30  # เตือนเมื่อเหลือ 30 นาที
 
-# ========= ฟังก์ชัน =========
+# ========== ฟังก์ชันบอท ==========
+def get_updates():
+    global LAST_UPDATE_ID
+    resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
+    data = resp.json()
+    if data.get('ok'):
+        for update in data['result']:
+            if 'message' in update:
+                LAST_UPDATE_ID = update['update_id']
+                handle_message(update['message'])
+
 def send_message(chat_id, text):
     requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
 
 def load_schedule():
+    if not os.path.exists(SCHEDULE_FILE):
+        return []
     try:
         with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
             content = f.read().strip()
@@ -47,77 +70,62 @@ def check_and_notify():
         if event['time'] == now and CHAT_ID:
             send_message(CHAT_ID, f"🔔 แจ้งเตือน: {event['message']}")
 
-# ========= ตรวจจับเวลาและปิดอัตโนมัติ =========
-def monitor_runtime():
+def handle_message(msg):
     global CHAT_ID
-    warned = False
-    while True:
-        runtime_min = (time.time() - START_TIME) / 60
-        remaining = MAX_RUNTIME_MIN - runtime_min
+    text = msg.get('text', '')
+    CHAT_ID = msg['chat']['id']
 
-        if remaining < NOTIFY_THRESHOLD_MIN and not warned:
-            if CHAT_ID:
-                send_message(CHAT_ID, f"[ ⚠️ ] 9CharnBot : ใกล้หมดเวลาแล้ว เหลือประมาณ {int(remaining)} นาที")
-            warned = True
-
-        if runtime_min >= MAX_RUNTIME_MIN:
-            if CHAT_ID:
-                send_message(CHAT_ID, "[ ⛔️ ] 9CharnBot : บอทปิดตัวเพื่อประหยัดเวลา (ครบ 490 ชั่วโมง)")
-            print("⏹️ Shutdown: Max runtime reached.")
-            sys.exit()
-
-        time.sleep(60)
-
-threading.Thread(target=monitor_runtime, daemon=True).start()
-
-# ========= Webhook =========
-@app.route('/')
-def home():
-    return '✅ Bot Webhook is active'
-
-@app.route(f"/{TOKEN}", methods=['POST'])
-def webhook():
-    global CHAT_ID
-    data = request.get_json()
-    if 'message' in data:
-        msg = data['message']
-        CHAT_ID = msg['chat']['id']
-        text = msg.get('text', '')
-        if text == '/start':
-            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot ใช้งานผ่าน Webhook\nใช้ `/add` เพิ่มงาน เช่น 09:00 ทดสอบระบบ\n `/list` แสดงรายการงาน\n `/remove` ลบรายการงาน\n `/clear` ลบรายการทั้งหมด ได้เลย")
-        elif text.startswith('/add '):
-            try:
-                parts = text[5:].split(' ', 1)
-                t, m = parts[0], parts[1]
-                datetime.datetime.strptime(t, '%H:%M')
-                add_schedule(t, m)
-                send_message(CHAT_ID, f"✅ เพิ่มงาน: {t} → {m}")
-            except:
-                send_message(CHAT_ID, "❌ รูปแบบไม่ถูกต้อง /add HH:MM ข้อความ")
-        elif text == '/list':
+    if text == '/start':
+        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n`/clear` ลบรายการงานทั้งหมด \n Delay 15 s")
+    elif text.startswith('/add '):
+        try:
+            parts = text[5:].split(' ', 1)
+            t, m = parts[0], parts[1]
+            datetime.datetime.strptime(t, '%H:%M')
+            add_schedule(t, m)
+            send_message(CHAT_ID, f"✅ เพิ่มงาน: {t} → {m}")
+        except:
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /add HH:MM ข้อความ")
+    elif text == '/list':
+        lst = load_schedule()
+        if lst:
+            lines = [f"{i+1}. {e['time']} → {e['message']}" for i, e in enumerate(lst)]
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📋 ตารางงาน มีดังนี้ \n" + "\n".join(lines))
+        else:
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงาน")
+    elif text.startswith('/remove '):
+        try:
+            idx = int(text.split()[1]) - 1
             lst = load_schedule()
-            if lst:
-                lines = [f"{i+1}. {e['time']} → {e['message']}" for i, e in enumerate(lst)]
-                send_message(CHAT_ID, "[ 📋 ] ตารางงาน:\n" + "\n".join(lines))
+            if 0 <= idx < len(lst):
+                removed = lst.pop(idx)
+                save_schedule(lst)
+                send_message(CHAT_ID, f"🗑️ ลบ: {removed['time']} → {removed['message']}")
             else:
-                send_message(CHAT_ID, "📭 ยังไม่มีตารางงาน")
-        elif text.startswith('/remove '):
-            try:
-                idx = int(text.split()[1]) - 1
-                lst = load_schedule()
-                if 0 <= idx < len(lst):
-                    removed = lst.pop(idx)
-                    save_schedule(lst)
-                    send_message(CHAT_ID, f"🗑️ ลบ: {removed['time']} → {removed['message']}")
-                else:
-                    send_message(CHAT_ID, "❌ ไม่พบลำดับนั้น")
-            except:
-                send_message(CHAT_ID, "❌ ใช้รูปแบบ /remove N")
-        elif text == '/clear':
-            save_schedule([])
-            send_message(CHAT_ID, "🧹 ล้างตารางเรียบร้อยแล้ว")
-    return 'ok'
+                send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ไม่พบลำดับนั้น")
+        except:
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /remove N")
+    elif text == '/clear':
+    save_schedule([])
+    send_message(CHAT_ID, "🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
 
-# ========= เริ่มต้นเซิร์ฟเวอร์ =========
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+
+# ========== Loop หลัก ==========
+print("🤖 Bot started...")
+while True:
+    try:
+        get_updates()
+        check_and_notify()
+
+         # ตรวจสอบเวลา runtime
+        runtime_min = (time.time() - START_TIME) / 60
+        if runtime_min > MAX_RUNTIME_MIN:
+            if CHAT_ID:
+                send_message(CHAT_ID, "[ ⚠️ ] 9CharnBot : ใกล้ถึงขีดจำกัดการใช้งานฟรีของ Railway แล้ว บอทจะปิดตัวเองเพื่อประหยัดเวลา")
+            print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
+            exit()
+            
+        time.sleep(5)
+    except Exception as e:
+        print("❌ Error:", e)
+        time.sleep(5)
