@@ -45,8 +45,13 @@ def load_schedule():
     try:
         with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
             content = f.read().strip()
-            return json.loads(content) if content else []
+            data = json.loads(content) if content else []
+            for d in data:
+                if 'notified' not in d:
+                    d['notified'] = False
+            return data
     except:
+        save_schedule([])
         return []
 
 def save_schedule(lst):
@@ -55,15 +60,20 @@ def save_schedule(lst):
 
 def add_schedule(time_str, message):
     lst = load_schedule()
-    lst.append({'time': time_str, 'message': message})
+    lst.append({'time': time_str, 'message': message, 'notified': False})
     save_schedule(lst)
 
 def check_and_notify():
     now = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).strftime('%H:%M')
     lst = load_schedule()
+    updated = False
     for event in lst:
-        if event['time'] == now and CHAT_ID:
+        if event['time'] == now and not event.get('notified', False) and CHAT_ID:
             send_message(CHAT_ID, f"🔔 แจ้งเตือน: {event['message']}")
+            event['notified'] = True
+            updated = True
+    if updated:
+        save_schedule(lst)
 
 def handle_message(msg):
     global CHAT_ID
@@ -71,7 +81,7 @@ def handle_message(msg):
     CHAT_ID = msg['chat']['id']
 
     if text == '/start':
-        send_message(CHAT_ID, "[ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n• `/clear` ล้างรายการทั้งหมด\n\n Bot Delay 5 s")
+        send_message(CHAT_ID, "[ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N\n• `/clear` ล้างรายการทั้งหมด\n• `/status_list` ตรวจสอบสถานะแจ้งเตือน\n\n Bot Delay 5 s")
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 1)
@@ -86,6 +96,13 @@ def handle_message(msg):
         if lst:
             lines = [f"{i+1}. {e['time']} → {e['message']}" for i, e in enumerate(lst)]
             send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📋 ตารางงาน:\n" + "\n".join(lines))
+        else:
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงาน")
+    elif text == '/status_list':
+        lst = load_schedule()
+        if lst:
+            lines = [f"{i+1}. {e['time']} → {e['message']} ✅" if e.get('notified') else f"{i+1}. {e['time']} → {e['message']} ⏳" for i, e in enumerate(lst)]
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ⏱️ สถานะแจ้งเตือน:\n" + "\n".join(lines))
         else:
             send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงาน")
     elif text.startswith('/remove '):
@@ -110,6 +127,12 @@ while True:
     try:
         get_updates()
         check_and_notify()
+
+        # ลบรายการที่แจ้งเตือนแล้ว
+        lst = load_schedule()
+        new_lst = [e for e in lst if not e.get('notified', False)]
+        if len(new_lst) != len(lst):
+            save_schedule(new_lst)
 
         # ตรวจสอบเวลา runtime
         runtime_min = (time.time() - START_TIME) / 60
