@@ -3,10 +3,11 @@ import requests
 import time
 import json
 import datetime
+import threading
 from zoneinfo import ZoneInfo
 from flask import Flask
-import threading
 
+#========== Flask Setup ==========
 app = Flask('')
 
 @app.route('/')
@@ -28,6 +29,9 @@ MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
 
 #========== Days of the Week ==========
 DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+#========== Temp State ==========
+user_waiting_for_remove = {}
 
 #========== Functions ==========
 def get_bot_version():
@@ -54,7 +58,7 @@ def send_start_keyboard(chat_id):
     keyboard = {
         "keyboard": [
             [{"text": "/add"}, {"text": "/list"}],
-            [{"text": "/remove 1"}, {"text": "/clear"}],
+            [{"text": "/remove"}, {"text": "/clear"}],
             [{"text": "/status_list"}, {"text": "/help"}]
         ],
         "resize_keyboard": True,
@@ -104,6 +108,24 @@ def handle_message(msg):
     text = msg.get('text', '')
     chat_id = msg['chat']['id']
 
+    if chat_id in user_waiting_for_remove:
+        if user_waiting_for_remove[chat_id] == 'awaiting_remove':
+            try:
+                idx = int(text.strip()) - 1
+                lst = load_schedule()
+                user_events = [e for e in lst if e['chat_id'] == chat_id]
+                if 0 <= idx < len(user_events):
+                    removed = user_events[idx]
+                    lst.remove(removed)
+                    save_schedule(lst)
+                    send_message(chat_id, f"[ 🤖 ] ลบสำเร็จ: {removed['time']} → {removed['message']}")
+                else:
+                    send_message(chat_id, "[ 🤖 ] ไม่มีลำดับนั้น กรุณาลองใหม่")
+            except:
+                send_message(chat_id, "[ 🤖 ] กรุณาพิมพ์หมายเลข เช่น 1, 2, 3 ...")
+            del user_waiting_for_remove[chat_id]
+            return
+
     if text == '/start':
         version = get_bot_version()
         send_message(chat_id,
@@ -121,13 +143,12 @@ def handle_message(msg):
             "📝 คำสั่ง:\n"
             "• `/add <วัน> <เวลา> ข้อความ` เพิ่มงาน\n"
             "• `/list` แสดงรายการของคุณ\n"
-            "• `/remove N` ลบงานลำดับ N\n"
+            "• `/remove` แล้วพิมพ์หมายเลข\n"
             "• `/clear` ล้างทั้งหมด\n"
             "• `/status_list` ตรวจสอบสถานะแจ้งเตือน\n"
             "📅 วัน: Mon Tue Wed Thu Fri Sat Sun\n"
             "⏰ เวลา: 24 ชม. รูปแบบ HH:MM\n"
             "⏳ บอทรีเฟรชทุก 1 วิ\n"
-            
         )
 
     elif text == '/add':
@@ -168,20 +189,13 @@ def handle_message(msg):
         else:
             send_message(chat_id, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงานของคุณ")
 
-    elif text.startswith('/remove '):
-        try:
-            idx = int(text.split()[1]) - 1
-            lst = load_schedule()
-            user_events = [e for e in lst if e['chat_id'] == chat_id]
-            if 0 <= idx < len(user_events):
-                removed = user_events[idx]
-                lst.remove(removed)
-                save_schedule(lst)
-                send_message(chat_id, f"[ 🤖 ] 9CharnBot \n🗑️ ลบ: {removed['time']} → {removed['message']}")
-            else:
-                send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ไม่พบลำดับนั้น")
-        except:
-            send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /remove N")
+    elif text == '/remove':
+        lst = [e for e in load_schedule() if e['chat_id'] == chat_id]
+        if not lst:
+            send_message(chat_id, "[ 🤖 ] ไม่มีรายการให้ลบ")
+        else:
+            user_waiting_for_remove[chat_id] = 'awaiting_remove'
+            send_message(chat_id, "[ 🤖 ] กรุณาพิมพ์หมายเลขรายการที่ต้องการลบ เช่น 1")
 
     elif text == '/clear':
         lst = [e for e in load_schedule() if e['chat_id'] != chat_id]
@@ -207,9 +221,10 @@ def handle_message(msg):
         except:
             send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ข้อความไม่เข้าใจ ลองใช้รูปแบบ <วัน> <เวลา> ข้อความ\nตัวอย่าง: Mon 18:00 ประชุม")
 
-# ========== Main Loop ==========
+#========== Main Loop ==========
 version = get_bot_version()
 print(f"🤖 9CharnBot started with version: {version}")
+
 while True:
     try:
         get_updates()
