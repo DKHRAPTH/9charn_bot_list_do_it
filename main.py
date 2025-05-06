@@ -26,6 +26,9 @@ SCHEDULE_FILE = 'schedule.json'
 CHAT_ID = None
 START_TIME = time.time()
 MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
+VERSION_FILE = 'version.txt'
+VERSION_CHECKED = False
+LAST_VERSION = ''
 
 # ========== Functions ==========
 def get_updates():
@@ -74,6 +77,17 @@ def check_and_notify():
             updated = True
     if updated:
         save_schedule(lst)
+
+def load_version():
+    global LAST_VERSION
+    try:
+        with open(VERSION_FILE, 'r') as f:
+            version = f.read().strip()
+            if version != LAST_VERSION:
+                LAST_VERSION = version
+                return version
+    except:
+        return None
 
 def handle_message(msg):
     global CHAT_ID
@@ -125,6 +139,13 @@ def handle_message(msg):
 print("🤖 Bot started...")
 while True:
     try:
+        # แจ้งเตือนอัปเดตเวอร์ชัน
+        if not VERSION_CHECKED:
+            version = load_version()
+            if version and CHAT_ID:
+                send_message(CHAT_ID, f"[ 🆕 ] 9CharnBot อัปเดตเป็นเวอร์ชัน {version} แล้ว!\n• ตรวจสอบฟีเจอร์ใหม่ด้วย /start")
+            VERSION_CHECKED = True
+
         get_updates()
         check_and_notify()
 
@@ -142,7 +163,7 @@ while True:
             print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
             exit()
 
-        time.sleep(5)
+        time.sleep(1)
     except Exception as e:
         print("❌ Error:", e)
         time.sleep(5)
