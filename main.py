@@ -3,9 +3,10 @@ import requests
 import time
 import json
 import datetime
+import threading
+import traceback
 from zoneinfo import ZoneInfo
 from flask import Flask
-import threading
 
 app = Flask('')
 
@@ -16,33 +17,42 @@ def home():
 def run_web():
     app.run(host='0.0.0.0', port=8080)
 
-threading.Thread(target=run_web).start()
+threading.Thread(target=run_web, daemon=True).start()
 
 # ========== Bot config ==========
-TOKEN = os.environ['TOKEN']
+TOKEN = os.environ.get('TOKEN')
 URL = f'https://api.telegram.org/bot{TOKEN}/'
-LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
+VERSION_FILE = 'version.txt'
+
+LAST_UPDATE_ID = 0
 CHAT_ID = None
 START_TIME = time.time()
 MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
-VERSION_FILE = 'version.txt'
-VERSION_CHECKED = False
+
 LAST_VERSION = ''
+VERSION_CHECKED = False
 
 # ========== Functions ==========
+
 def get_updates():
     global LAST_UPDATE_ID
-    resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
-    data = resp.json()
-    if data.get('ok'):
-        for update in data['result']:
-            if 'message' in update:
-                LAST_UPDATE_ID = update['update_id']
-                handle_message(update['message'])
+    try:
+        resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1}, timeout=5)
+        data = resp.json()
+        if data.get('ok'):
+            for update in data['result']:
+                if 'message' in update:
+                    LAST_UPDATE_ID = update['update_id']
+                    handle_message(update['message'])
+    except Exception as e:
+        print("get_updates error:", e)
 
 def send_message(chat_id, text):
-    requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
+    try:
+        requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
+    except Exception as e:
+        print("send_message error:", e)
 
 def load_schedule():
     try:
@@ -67,11 +77,14 @@ def add_schedule(time_str, message):
     save_schedule(lst)
 
 def check_and_notify():
+    global CHAT_ID
+    if not CHAT_ID:
+        return
     now = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).strftime('%H:%M')
     lst = load_schedule()
     updated = False
     for event in lst:
-        if event['time'] == now and not event.get('notified', False) and CHAT_ID:
+        if event['time'] == now and not event.get('notified', False):
             send_message(CHAT_ID, f"🔔 แจ้งเตือน: {event['message']}")
             event['notified'] = True
             updated = True
@@ -90,12 +103,18 @@ def load_version():
         return None
 
 def handle_message(msg):
-    global CHAT_ID
+    global CHAT_ID, VERSION_CHECKED
     text = msg.get('text', '')
     CHAT_ID = msg['chat']['id']
 
+    if not VERSION_CHECKED:
+        version = load_version()
+        if version:
+            send_message(CHAT_ID, f"[ 🆕 ] 9CharnBot อัปเดตเป็นเวอร์ชัน {version} แล้ว!\n• ตรวจสอบฟีเจอร์ใหม่ด้วย /start")
+        VERSION_CHECKED = True
+
     if text == '/start':
-        send_message(CHAT_ID, "[ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N\n• `/clear` ล้างรายการทั้งหมด\n• `/status_list` ตรวจสอบสถานะแจ้งเตือน\n\n Bot Delay 5 s")
+        send_message(CHAT_ID, "[ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ`\n• `/list`\n• `/remove N`\n• `/clear`\n• `/status_list`\n\nBot Delay 5 s")
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 1)
@@ -136,34 +155,29 @@ def handle_message(msg):
         send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
 
 # ========== Main Loop ==========
-print("🤖 Bot started...")
-while True:
-    try:
-        # แจ้งเตือนอัปเดตเวอร์ชัน
-        if not VERSION_CHECKED:
-            version = load_version()
-            if version and CHAT_ID:
-                send_message(CHAT_ID, f"[ 🆕 ] 9CharnBot อัปเดตเป็นเวอร์ชัน {version} แล้ว!\n• ตรวจสอบฟีเจอร์ใหม่ด้วย /start")
-            VERSION_CHECKED = True
+def main_loop():
+    global CHAT_ID
+    print("🤖 Bot started...")
+    while True:
+        try:
+            get_updates()
+            check_and_notify()
 
-        get_updates()
-        check_and_notify()
+            lst = load_schedule()
+            new_lst = [e for e in lst if not e.get('notified', False)]
+            if len(new_lst) != len(lst):
+                save_schedule(new_lst)
 
-        # ลบรายการที่แจ้งเตือนแล้ว
-        lst = load_schedule()
-        new_lst = [e for e in lst if not e.get('notified', False)]
-        if len(new_lst) != len(lst):
-            save_schedule(new_lst)
+            runtime_min = (time.time() - START_TIME) / 60
+            if runtime_min > MAX_RUNTIME_MIN:
+                if CHAT_ID:
+                    send_message(CHAT_ID, "[ ⚠️ ] 9CharnBot : บอทกำลังจะหยุดเพื่อประหยัด Railway hours")
+                print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
+                os._exit(0)
 
-        # ตรวจสอบเวลา runtime
-        runtime_min = (time.time() - START_TIME) / 60
-        if runtime_min > MAX_RUNTIME_MIN:
-            if CHAT_ID:
-                send_message(CHAT_ID, "[ ⚠️ ] 9CharnBot : ใกล้ถึงขีดจำกัดการใช้งานฟรีของ Railway แล้ว บอทจะปิดตัวเองเพื่อประหยัดเวลา")
-            print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
-            exit()
+            time.sleep(5)
+        except Exception:
+            print("❌ Error in main loop:\n" + traceback.format_exc())
+            time.sleep(5)
 
-        time.sleep(1)
-    except Exception as e:
-        print("❌ Error:", e)
-        time.sleep(5)
+threading.Thread(target=main_loop, daemon=True).start()
