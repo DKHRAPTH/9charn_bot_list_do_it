@@ -53,15 +53,16 @@ def send_message(chat_id, text):
 def send_start_keyboard(chat_id):
     keyboard = {
         "keyboard": [
-            [{"text": "Mon 10:00 ประชุมทีม"}, {"text": "Tue 14:30 เรียนพิเศษ"}],
-            [{"text": "Wed 08:00 วิ่งเช้า"}, {"text": "Thu 20:00 นัดเพื่อน"}]
+            [{"text": "/add"}, {"text": "/list"}],
+            [{"text": "/remove 1"}, {"text": "/clear"}],
+            [{"text": "/status_list"}, {"text": "/help"}]
         ],
         "resize_keyboard": True,
         "one_time_keyboard": False
     }
     requests.post(URL + 'sendMessage', data={
         'chat_id': chat_id,
-        'text': "[ 🤖 ] เลือกตัวอย่างหรือลองพิมพ์รูปแบบ: <วัน> <เวลา> ข้อความ",
+        'text': "[ 🤖 ] คำสั่งที่สามารถใช้ได้",
         'reply_markup': json.dumps(keyboard)
     })
 
