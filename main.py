@@ -5,14 +5,15 @@ import json
 import datetime
 from flask import Flask
 import threading
+import re
 
-# ========== จัดการ ZoneInfo ตามเวอร์ชัน Python ==========
+# ========== จัดการ ZoneInfo ==========
 try:
-    from zoneinfo import ZoneInfo  # สำหรับ Python >= 3.9
+    from zoneinfo import ZoneInfo
 except ImportError:
-    from backports.zoneinfo import ZoneInfo  # สำหรับ Python < 3.9
+    from backports.zoneinfo import ZoneInfo
 
-# ========== Flask สำหรับ uptime หรือ Railway ==========
+# ========== Flask สำหรับ uptime ==========
 app = Flask('')
 
 @app.route('/')
@@ -20,21 +21,21 @@ def home():
     return "✅ Bot is running."
 
 def run_web():
-    port = int(os.environ.get('PORT', 8080))  # ใช้ PORT จาก Railway
+    port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
 threading.Thread(target=run_web, daemon=True).start()
 
-# ========== Telegram Bot Config ==========
+# ========== Bot Config ==========
 TOKEN = os.environ['TOKEN']
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
 CHAT_ID = None
 START_TIME = time.time()
-MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
+MAX_RUNTIME_MIN = 29400  # 490 ชม.
 
-# ========== ฟังก์ชันบอท ==========
+# ========== ฟังก์ชันหลัก ==========
 def get_updates():
     global LAST_UPDATE_ID
     resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
@@ -83,8 +84,10 @@ def handle_message(msg):
         send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n`/clear` ลบรายการงานทั้งหมด \n Delay 15 s")
     elif text.startswith('/add '):
         try:
-            parts = text[5:].split(' ', 1)
-            t, m = parts[0], parts[1]
+            match = re.match(r'^/add (\d{2}:\d{2}) (.+)$', text)
+            if not match:
+                raise ValueError("Invalid format")
+            t, m = match.group(1), match.group(2)
             datetime.datetime.strptime(t, '%H:%M')
             add_schedule(t, m)
             send_message(CHAT_ID, f"✅ เพิ่มงาน: {t} → {m}")
@@ -114,7 +117,7 @@ def handle_message(msg):
         send_message(CHAT_ID, "🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
 
 # ========== Loop หลัก ==========
-print("🤖 Bot5 started...")
+print("🤖 Bot started...")
 while True:
     try:
         get_updates()
