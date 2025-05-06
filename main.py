@@ -130,6 +130,9 @@ def handle_message(msg):
             f"vr. {version}"
         )
 
+    elif text == '/add':
+        send_message(chat_id, "[ 🤖 ] กรุณาพิมพ์ในรูปแบบ: <วัน> <เวลา> <ข้อความ>\nตัวอย่าง: Mon 18:00 ประชุมทีม")
+
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 2)
