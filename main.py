@@ -223,7 +223,8 @@ while True:
         time.sleep(1)
     except Exception as e:
         print("❌ Error:", e)
-        time.sleep(5)     try:
+        time.sleep(5)     
+        try:
             idx = int(text.split()[1]) - 1
             lst = load_schedule()
             user_events = [e for e in lst if e['chat_id'] == chat_id]
