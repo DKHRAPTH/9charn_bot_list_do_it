@@ -31,6 +31,13 @@ MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
 DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 # ========== Functions ==========
+def get_bot_version():
+    try:
+        with open('version.txt', 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except:
+        return "unknown"
+
 def get_updates():
     global LAST_UPDATE_ID
     resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
@@ -67,13 +74,12 @@ def add_schedule(time_str, message):
     save_schedule(lst)
 
 def check_and_notify():
-    now = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).strftime('%H:%M')
-    print(f"Checking notifications at {now}")  # เพิ่ม log
+    now = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).strftime('%H:%M')  # เวลาในรูปแบบ HH:MM
     lst = load_schedule()
     updated = False
     for event in lst:
-        if event['time'] == now and not event.get('notified', False) and CHAT_ID:
-            print(f"Sending notification: {event['message']}")  # เพิ่ม log
+        event_time = event['time'].split(' ')[1]  # ตัดแค่เวลาจาก 'YYYY-MM-DD HH:MM'
+        if event_time == now and not event.get('notified', False) and CHAT_ID:
             send_message(CHAT_ID, f"🔔 แจ้งเตือน: {event['message']}")
             event['notified'] = True
             updated = True
@@ -142,7 +148,8 @@ def handle_message(msg):
         send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
 
 # ========== Main Loop ==========
-print("🤖 Bot started...")
+version = get_bot_version()
+print(f"🤖 9CharnBot started with version: {version}")
 while True:
     try:
         get_updates()
