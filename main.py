@@ -18,7 +18,7 @@ def run_web():
 
 threading.Thread(target=run_web).start()
 
-# ========== Bot config ==========
+========== Bot config ==========
 TOKEN = os.environ['TOKEN']
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
@@ -26,11 +26,10 @@ SCHEDULE_FILE = 'schedule.json'
 START_TIME = time.time()
 MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
 
-# ========== Days of the Week ==========
+========== Days of the Week ==========
 DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-# ========== Functions ==========
-
+========== Functions ==========
 def get_bot_version():
     try:
         with open('version.txt', 'r', encoding='utf-8') as f:
@@ -47,15 +46,24 @@ def get_updates():
             if 'message' in update:
                 LAST_UPDATE_ID = update['update_id']
                 handle_message(update['message'])
-            elif 'callback_query' in update:
-                LAST_UPDATE_ID = update['update_id']
-                handle_callback(update['callback_query'])
 
-def send_message(chat_id, text, reply_markup=None):
-    payload = {'chat_id': chat_id, 'text': text}
-    if reply_markup:
-        payload['reply_markup'] = json.dumps(reply_markup)
-    requests.post(URL + 'sendMessage', data=payload)
+def send_message(chat_id, text):
+    requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
+
+def send_start_keyboard(chat_id):
+    keyboard = {
+        "keyboard": [
+            [{"text": "Mon 10:00 ประชุมทีม"}, {"text": "Tue 14:30 เรียนพิเศษ"}],
+            [{"text": "Wed 08:00 วิ่งเช้า"}, {"text": "Thu 20:00 นัดเพื่อน"}]
+        ],
+        "resize_keyboard": True,
+        "one_time_keyboard": False
+    }
+    requests.post(URL + 'sendMessage', data={
+        'chat_id': chat_id,
+        'text': "[ 🤖 ] เลือกตัวอย่างหรือลองพิมพ์รูปแบบ: <วัน> <เวลา> ข้อความ",
+        'reply_markup': json.dumps(keyboard)
+    })
 
 def load_schedule():
     try:
@@ -85,7 +93,7 @@ def check_and_notify():
     updated = False
     for event in lst:
         if event['time'] == now and not event.get('notified', False):
-            send_message(event['chat_id'], f"[ 🤖 ] 9CharnBot \n🔔 ظحتَعْ تنبِيهًا: {event['message']}")
+            send_message(event['chat_id'], f"[ 🤖 ] 9CharnBot \n🔔 แจ้งเตือน: {event['message']}")
             event['notified'] = True
             updated = True
     if updated:
@@ -96,20 +104,15 @@ def handle_message(msg):
     chat_id = msg['chat']['id']
 
     if text == '/start':
-        buttons = {
-            'keyboard': [[{'text': '➕ เพิ่มงาน'}]],
-            'resize_keyboard': True,
-            'one_time_keyboard': False
-        }
+        version = get_bot_version()
         send_message(chat_id,
             "[ 🤖 ] 9CharnBot is Running.... \n"
-            "👋 أهلًا وسهلا بك!\n"
-            "جدولُك مُتوافِر \u0648أنا جاهز\n"
-            "اكتب /help لعرض كل الأوامر",
-            reply_markup=buttons)
-
-    elif text == '➕ เพิ่มงาน':
-        send_message(chat_id, "กรุณาพิมพ์ในรูปแบบ: <วัน> <เวลา> <ข้อความ>\nตัวอย่าง: Mon 19:00 ประชุม")
+            "👋 ยินดีต้อนรับสู่ 9CharnBot!\n"
+            "ตารางงานของคุณพร้อมหรือยัง ผมพร้อมแล้วนะ\n"
+            "พิมพ์ /help เพื่อดูวิธีใช้งานคำสั่งต่าง ๆ\n\n"
+            f"vr. {version}"
+        )
+        send_start_keyboard(chat_id)
 
     elif text == '/help':
         send_message(chat_id,
@@ -122,11 +125,13 @@ def handle_message(msg):
             "• `/status_list` ตรวจสอบสถานะแจ้งเตือน\n"
             "📅 วัน: Mon Tue Wed Thu Fri Sat Sun\n"
             "⏰ เวลา: 24 ชม. รูปแบบ HH:MM\n"
-            "⏳ บอทรีเฟรชทุก 1 วิ\n")
+            "⏳ บอทรีเฟรชทุก 1 วิ\n\n"
+            f"vr. {version}"
+        )
 
-    elif any(day in text for day in DAYS_OF_WEEK):
+    elif text.startswith('/add '):
         try:
-            parts = text.split(' ', 2)
+            parts = text[5:].split(' ', 2)
             day_str, time_str, message = parts[0], parts[1], parts[2]
             if day_str not in DAYS_OF_WEEK:
                 raise ValueError("Invalid day")
@@ -141,7 +146,7 @@ def handle_message(msg):
             add_schedule(chat_id, f"{next_day_str} {time_str}", message)
             send_message(chat_id, f"[ 🤖 ] 9CharnBot \n✅ เพิ่มงาน: {next_day_str} {time_str} → {message}")
         except Exception as e:
-            send_message(chat_id, f"❌ รูปแบบไม่ถูกต้อง: <วัน> <เวลา> <ข้อความ>\nตัวอย่าง: Mon 19:00 ประชุม\nข้อผิดพลาด: {str(e)}")
+            send_message(chat_id, f"[ 🤖 ] 9CharnBot : ❌ รูปแบบผิด /add <วัน> <เวลา> ข้อความ\nตัวอย่าง: /add Mon 19:00 ประชุม\nข้อผิดพลาด: {str(e)}")
 
     elif text == '/list':
         lst = [e for e in load_schedule() if e['chat_id'] == chat_id]
@@ -161,6 +166,64 @@ def handle_message(msg):
 
     elif text.startswith('/remove '):
         try:
+            idx = int(text.split()[1]) - 1
+            lst = load_schedule()
+            user_events = [e for e in lst if e['chat_id'] == chat_id]
+            if 0 <= idx < len(user_events):
+                removed = user_events[idx]
+                lst.remove(removed)
+                save_schedule(lst)
+                send_message(chat_id, f"[ 🤖 ] 9CharnBot \n🗑️ ลบ: {removed['time']} → {removed['message']}")
+            else:
+                send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ไม่พบลำดับนั้น")
+        except:
+            send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /remove N")
+
+    elif text == '/clear':
+        lst = [e for e in load_schedule() if e['chat_id'] != chat_id]
+        save_schedule(lst)
+        send_message(chat_id, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานของคุณเรียบร้อยแล้ว")
+
+    else:
+        try:
+            parts = text.split(' ', 2)
+            day_str, time_str, message = parts[0], parts[1], parts[2]
+            if day_str in DAYS_OF_WEEK:
+                current_date = datetime.datetime.now()
+                day_num = DAYS_OF_WEEK.index(day_str)
+                days_to_add = (day_num - current_date.weekday()) % 7
+                next_date = current_date + datetime.timedelta(days=days_to_add)
+                next_day_str = next_date.strftime('%Y-%m-%d')
+                datetime.datetime.strptime(time_str, '%H:%M')
+
+                add_schedule(chat_id, f"{next_day_str} {time_str}", message)
+                send_message(chat_id, f"[ 🤖 ] 9CharnBot \n✅ เพิ่มงาน: {next_day_str} {time_str} → {message}")
+            else:
+                raise Exception("ไม่ใช่วันในสัปดาห์")
+        except:
+            send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ข้อความไม่เข้าใจ ลองใช้รูปแบบ <วัน> <เวลา> ข้อความ\nตัวอย่าง: Mon 18:00 ประชุม")
+
+========== Main Loop ==========
+version = get_bot_version()
+print(f"🤖 9CharnBot started with version: {version}")
+while True:
+    try:
+        get_updates()
+        check_and_notify()
+
+        lst = load_schedule()
+        new_lst = [e for e in lst if not e.get('notified', False)]
+        if len(new_lst) != len(lst):
+            save_schedule(new_lst)
+
+        if (time.time() - START_TIME) / 60 > MAX_RUNTIME_MIN:
+            print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
+            exit()
+
+        time.sleep(1)
+    except Exception as e:
+        print("❌ Error:", e)
+        time.sleep(5)     try:
             idx = int(text.split()[1]) - 1
             lst = load_schedule()
             user_events = [e for e in lst if e['chat_id'] == chat_id]
