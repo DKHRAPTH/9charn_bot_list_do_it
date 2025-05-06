@@ -84,7 +84,7 @@ def webhook():
         CHAT_ID = msg['chat']['id']
         text = msg.get('text', '')
         if text == '/start':
-            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot ใช้งานผ่าน Webhook\nใช้ /add /list /remove ได้เลย")
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot ใช้งานผ่าน Webhook\nใช้ `/add` เพิ่มงาน เช่น 09:00 ทดสอบระบบ\n `/list` แสดงรายการงาน\n `/remove` ลบรายการงาน\n `/clear` ลบรายการทั้งหมด ได้เลย")
         elif text.startswith('/add '):
             try:
                 parts = text[5:].split(' ', 1)
