@@ -11,8 +11,6 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
 app = Flask('')
 
 @app.route('/')
@@ -43,10 +41,8 @@ def get_updates():
                 LAST_UPDATE_ID = update['update_id']
                 handle_message(update['message'])
 
-def send_message(chat_id, text, reply_markup=None):
+def send_message(chat_id, text):
     data = {'chat_id': chat_id, 'text': text}
-    if reply_markup:
-        data['reply_markup'] = json.dumps(reply_markup)
     requests.post(URL + 'sendMessage', data=data)
 
 def load_schedule():
@@ -63,30 +59,35 @@ def save_schedule(lst):
     with open(SCHEDULE_FILE, 'w', encoding='utf-8') as f:
         json.dump(lst, f, ensure_ascii=False)
 
-def add_schedule(time_str, message):
+def add_schedule(day, time_str, message):
     lst = load_schedule()
-    lst.append({'time': time_str, 'message': message, 'status': 'pending'})
+    lst.append({'day': day, 'time': time_str, 'message': message, 'status': 'pending'})
     save_schedule(lst)
 
 def check_and_notify():
-    now = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).strftime('%H:%M')
+    now = datetime.datetime.now(ZoneInfo("Asia/Bangkok"))
+    current_day = now.strftime('%A')  # Monday, Tuesday...
+    thai_days = {
+        'Monday': 'จันทร์',
+        'Tuesday': 'อังคาร',
+        'Wednesday': 'พุธ',
+        'Thursday': 'พฤหัส',
+        'Friday': 'ศุกร์',
+        'Saturday': 'เสาร์',
+        'Sunday': 'อาทิตย์'
+    }
+    today_thai = thai_days[current_day]
+    current_time = now.strftime('%H:%M')
+
     lst = load_schedule()
     changed = False
     for event in lst:
-        if event['time'] == now and event['status'] == 'pending' and CHAT_ID:
+        if event['day'] == today_thai and event['time'] == current_time and event['status'] == 'pending' and CHAT_ID:
             send_message(CHAT_ID, f"🔔 แจ้งเตือน: {event['message']} ✅ เสร็จแล้ว")
             event['status'] = 'done'
             changed = True
     if changed:
         save_schedule(lst)
-
-# สร้างปุ่มเวลา 24 ชั่วโมง
-def time_keyboard():
-    keyboard = []
-    for hour in range(24):
-        time_str = f"{hour:02}:00"
-        keyboard.append([InlineKeyboardButton(time_str, callback_data=time_str)])
-    return keyboard
 
 def handle_message(msg):
     global CHAT_ID
@@ -94,21 +95,25 @@ def handle_message(msg):
     CHAT_ID = msg['chat']['id']
 
     if text == '/start':
-        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n`/clear` ลบรายการงานทั้งหมด ")
+        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add วัน HH:MM ข้อความ` เพิ่มตารางงาน เช่น `/add จันทร์ 08:00 ไปโรงเรียน`\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N\n• `/clear` ลบตารางงานทั้งหมด")
     elif text.startswith('/add '):
         try:
-            parts = text[5:].split(' ', 1)
-            t, m = parts[0], parts[1]
+            parts = text[5:].split(' ', 2)
+            if len(parts) < 3:
+                raise ValueError
+            day, t, m = parts[0], parts[1], parts[2]
             datetime.datetime.strptime(t, '%H:%M')
-            add_schedule(t, m)
-            send_message(CHAT_ID, f"✅ เพิ่มงาน: {t} → {m}")
+            if day not in ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์', 'อาทิตย์']:
+                raise ValueError
+            add_schedule(day, t, m)
+            send_message(CHAT_ID, f"✅ เพิ่มงาน: {day} {t} → {m}")
         except:
-            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /add HH:MM ข้อความ")
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /add วัน HH:MM ข้อความ")
     elif text == '/list':
         lst = load_schedule()
         if lst:
-            lines = [f"{i+1}. {e['time']} → {e['message']} ({'✅' if e.get('status') == 'done' else '⏳'})" for i, e in enumerate(lst)]
-            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📋 ตารางงาน มีดังนี้ \n" + "\n".join(lines))
+            lines = [f"{i+1}. {e['day']} {e['time']} → {e['message']} ({'✅' if e.get('status') == 'done' else '⏳'})" for i, e in enumerate(lst)]
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📋 ตารางงานมีดังนี้\n" + "\n".join(lines))
         else:
             send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงาน")
     elif text.startswith('/remove '):
@@ -118,7 +123,7 @@ def handle_message(msg):
             if 0 <= idx < len(lst):
                 removed = lst.pop(idx)
                 save_schedule(lst)
-                send_message(CHAT_ID, f"🗑️ ลบ: {removed['time']} → {removed['message']}")
+                send_message(CHAT_ID, f"🗑️ ลบ: {removed['day']} {removed['time']} → {removed['message']}")
             else:
                 send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ไม่พบลำดับนั้น")
         except:
@@ -126,10 +131,6 @@ def handle_message(msg):
     elif text == '/clear':
         save_schedule([])
         send_message(CHAT_ID, "🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
-    elif text == '/quickadd':
-        keyboard = time_keyboard()  # สร้างปุ่มเวลา 24 ชั่วโมง
-        reply_markup = {"inline_keyboard": keyboard}
-        send_message(CHAT_ID, "เลือกเวลาที่ต้องการเพิ่มตารางงาน:", reply_markup)
 
 print("🤖 Bot started...")
 while True:
