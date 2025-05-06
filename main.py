@@ -55,7 +55,7 @@ def load_schedule():
     try:
         with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
             content = f.read().strip()
-            return json.loads(content) if content else []
+        return json.loads(content) if content else []
     except:
         return []
 
@@ -79,6 +79,14 @@ def check_and_notify():
             changed = True
     if changed:
         save_schedule(lst)
+
+# สร้างปุ่มเวลา 24 ชั่วโมง
+def time_keyboard():
+    keyboard = []
+    for hour in range(24):
+        time_str = f"{hour:02}:00"
+        keyboard.append([InlineKeyboardButton(time_str, callback_data=time_str)])
+    return keyboard
 
 def handle_message(msg):
     global CHAT_ID
@@ -119,10 +127,7 @@ def handle_message(msg):
         save_schedule([])
         send_message(CHAT_ID, "🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
     elif text == '/quickadd':
-        keyboard = [
-            [InlineKeyboardButton("08:00", callback_data='time_08:00'), InlineKeyboardButton("12:00", callback_data='time_12:00')],
-            [InlineKeyboardButton("18:00", callback_data='time_18:00'), InlineKeyboardButton("22:00", callback_data='time_22:00')]
-        ]
+        keyboard = time_keyboard()  # สร้างปุ่มเวลา 24 ชั่วโมง
         reply_markup = {"inline_keyboard": keyboard}
         send_message(CHAT_ID, "เลือกเวลาที่ต้องการเพิ่มตารางงาน:", reply_markup)
 
