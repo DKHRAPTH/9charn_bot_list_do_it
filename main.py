@@ -18,18 +18,16 @@ def run_web():
 
 threading.Thread(target=run_web).start()
 
-# ========== Bot config ==========
+# ========== Config ==========
 TOKEN = os.environ['TOKEN']
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
 START_TIME = time.time()
-MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
-
-# ========== Days of the Week ==========
+MAX_RUNTIME_MIN = 29400
 DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-# ========== Functions ==========
+# ========== Utilities ==========
 
 def get_bot_version():
     try:
@@ -44,12 +42,43 @@ def get_updates():
     data = resp.json()
     if data.get('ok'):
         for update in data['result']:
+            LAST_UPDATE_ID = update['update_id']
             if 'message' in update:
-                LAST_UPDATE_ID = update['update_id']
                 handle_message(update['message'])
+            elif 'callback_query' in update:
+                handle_callback(update['callback_query'])
 
 def send_message(chat_id, text):
     requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
+
+def send_message_with_buttons(chat_id, text, buttons):
+    reply_markup = {"inline_keyboard": buttons}
+    data = {
+        'chat_id': chat_id,
+        'text': text,
+        'reply_markup': json.dumps(reply_markup),
+        'parse_mode': 'Markdown'
+    }
+    requests.post(URL + 'sendMessage', data=data)
+
+def handle_callback(callback):
+    query_id = callback['id']
+    chat_id = callback['message']['chat']['id']
+    data = callback['data']
+
+    command_map = {
+        "cmd_add": "➕ /add <วัน> <เวลา> ข้อความ\nตัวอย่าง: /add Mon 19:00 ประชุม",
+        "cmd_list": "📋 /list → แสดงรายการงานทั้งหมด",
+        "cmd_remove": "❌ /remove N → ลบงานลำดับ N",
+        "cmd_clear": "🧹 /clear → ล้างรายการทั้งหมด",
+        "cmd_status": "⏱️ /status_list → ตรวจสอบสถานะแจ้งเตือน"
+    }
+
+    reply_text = command_map.get(data, "ไม่รู้จักคำสั่งนี้")
+    send_message(chat_id, reply_text)
+    requests.post(URL + 'answerCallbackQuery', data={'callback_query_id': query_id})
+
+# ========== Schedule Functions ==========
 
 def load_schedule():
     try:
@@ -85,6 +114,8 @@ def check_and_notify():
     if updated:
         save_schedule(lst)
 
+# ========== Message Handler ==========
+
 def handle_message(msg):
     text = msg.get('text', '')
     chat_id = msg['chat']['id']
@@ -93,25 +124,21 @@ def handle_message(msg):
         send_message(chat_id,
             "[ 🤖 ] 9CharnBot is Running.... \n"
             "👋 ยินดีต้อนรับสู่ 9CharnBot!\n"
-            "ตารางงานของคุณพร้อมหรือยัง ผมพร้อมแล้วนะ\n"
             "พิมพ์ /help เพื่อดูวิธีใช้งานคำสั่งต่าง ๆ\n\n"
-                     f"vr. {version}"
+            f"vr. {version}"
         )
 
     elif text == '/help':
-        send_message(chat_id,
+        buttons = [
+            [{"text": "➕ /add", "callback_data": "cmd_add"},
+             {"text": "📋 /list", "callback_data": "cmd_list"}],
+            [{"text": "❌ /remove", "callback_data": "cmd_remove"},
+             {"text": "🧹 /clear", "callback_data": "cmd_clear"}],
+            [{"text": "⏱️ /status_list", "callback_data": "cmd_status"}]
+        ]
+        send_message_with_buttons(chat_id,
             "[ 🤖 ] 9CharnBot \n"
-            "📝 คำสั่ง:\n"
-            "• `/add <วัน> <เวลา> ข้อความ` เพิ่มงาน\n"
-            "• `/list` แสดงรายการของคุณ\n"
-            "• `/remove N` ลบงานลำดับ N\n"
-            "• `/clear` ล้างทั้งหมด\n"
-            "• `/status_list` ตรวจสอบสถานะแจ้งเตือน\n"
-            "📅 วัน: Mon Tue Wed Thu Fri Sat Sun\n"
-            "⏰ เวลา: 24 ชม. รูปแบบ HH:MM\n"
-            "⏳ บอทรีเฟรชทุก 1 วิ\n\n"
-                     f"vr. {version}"
-        )
+            "กรุณาเลือกคำสั่งที่ต้องการใช้งาน:", buttons)
 
     elif text.startswith('/add '):
         try:
@@ -177,7 +204,6 @@ while True:
         get_updates()
         check_and_notify()
 
-        # ลบที่แจ้งเตือนแล้ว
         lst = load_schedule()
         new_lst = [e for e in lst if not e.get('notified', False)]
         if len(new_lst) != len(lst):
