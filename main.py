@@ -1,159 +1,190 @@
 import os
+import requests
+import time
 import json
 import datetime
-from flask import Flask, request
-import requests
 from zoneinfo import ZoneInfo
-from threading import Thread
-import time
+from flask import Flask
+import threading
 
-TOKEN = os.environ.get('BOT_TOKEN')
-BASE_URL = f'https://api.telegram.org/bot{TOKEN}'
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "✅ Bot is running."
+
+def run_web():
+    app.run(host='0.0.0.0', port=8080)
+
+threading.Thread(target=run_web).start()
+
+# ========== Bot config ==========
+TOKEN = os.environ['TOKEN']
+URL = f'https://api.telegram.org/bot{TOKEN}/'
+LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
+START_TIME = time.time()
+MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
 
-app = Flask(__name__)
+# ========== Days of the Week ==========
+DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+# ========== Functions ==========
+
+def get_bot_version():
+    try:
+        with open('version.txt', 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except:
+        return "unknown"
+
+def get_updates():
+    global LAST_UPDATE_ID
+    resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
+    data = resp.json()
+    if data.get('ok'):
+        for update in data['result']:
+            if 'message' in update:
+                LAST_UPDATE_ID = update['update_id']
+                handle_message(update['message'])
 
 def send_message(chat_id, text):
-    url = f'{BASE_URL}/sendMessage'
-    payload = {'chat_id': chat_id, 'text': text}
-    requests.post(url, json=payload)
+    requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
 
-def load_schedule(chat_id):
+def load_schedule():
     try:
         with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            if str(chat_id) not in data:
-                data[str(chat_id)] = []
-            for d in data[str(chat_id)]:
+            content = f.read().strip()
+            data = json.loads(content) if content else []
+            for d in data:
                 if 'notified' not in d:
                     d['notified'] = False
-            return data[str(chat_id)]
+            return data
     except:
-        save_schedule(chat_id, [])
+        save_schedule([])
         return []
 
-def save_schedule(chat_id, lst):
-    try:
-        with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except:
-        data = {}
-    data[str(chat_id)] = lst
+def save_schedule(lst):
     with open(SCHEDULE_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False)
+        json.dump(lst, f, ensure_ascii=False)
 
 def add_schedule(chat_id, time_str, message):
-    lst = load_schedule(chat_id)
-    lst.append({'time': time_str, 'message': message, 'notified': False})
-    save_schedule(chat_id, lst)
+    lst = load_schedule()
+    lst.append({'chat_id': chat_id, 'time': time_str, 'message': message, 'notified': False})
+    save_schedule(lst)
 
 def check_and_notify():
-    while True:
-        now = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).strftime('%H:%M')
-        try:
-            with open(SCHEDULE_FILE, 'r', encoding='utf-8') as f:
-                all_data = json.load(f)
-        except:
-            all_data = {}
-
-        updated = False
-        for chat_id, events in all_data.items():
-            for event in events:
-                event_time = event['time'].split(' ')[1]
-                if event_time == now and not event.get('notified', False):
-                    send_message(chat_id, f"[ 🤖 ] 9CharnBot \n🔔 แจ้งเตือน: {event['message']}")
-                    event['notified'] = True
-                    updated = True
-            all_data[chat_id] = events
-
-        if updated:
-            with open(SCHEDULE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(all_data, f, ensure_ascii=False)
-
-        time.sleep(60)
-
-@app.route(f'/{TOKEN}', methods=['POST'])
-def webhook():
-    data = request.get_json()
-    if 'message' in data:
-        handle_message(data['message'])
-    return 'ok'
+    now = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).strftime('%Y-%m-%d %H:%M')
+    lst = load_schedule()
+    updated = False
+    for event in lst:
+        if event['time'] == now and not event.get('notified', False):
+            send_message(event['chat_id'], f"[ 🤖 ] 9CharnBot \n🔔 แจ้งเตือน: {event['message']}")
+            event['notified'] = True
+            updated = True
+    if updated:
+        save_schedule(lst)
 
 def handle_message(msg):
     text = msg.get('text', '')
-    chat_id = str(msg['chat']['id'])
+    chat_id = msg['chat']['id']
 
     if text == '/start':
-        send_message(chat_id, "[ 🤖 ] 9CharnBot \n👋 ยินดีต้อนรับ! พิมพ์ /help เพื่อดูคำสั่งทั้งหมด")
+        send_message(chat_id,
+            "[ 🤖 ] 9CharnBot \n"
+            "👋 ยินดีต้อนรับสู่ 9CharnBot!\n"
+            "พิมพ์ /help เพื่อดูวิธีใช้งานคำสั่งต่าง ๆ"
+        )
 
     elif text == '/help':
-        send_message(chat_id, (
-            "[ 🤖 ] 9CharnBot : รายการคำสั่ง\n"
-            "/add [วัน] [เวลา] [ข้อความ] - เพิ่มงาน เช่น /add พรุ่งนี้ 09:00 ประชุม\n"
-            "/list - ดูรายการงาน\n"
-            "/remove [ลำดับ] - ลบงานตามลำดับ\n"
-            "/clear - ล้างงานทั้งหมด\n"
-            "/status_list - ดูสถานะการแจ้งเตือนของแต่ละงาน"
-        ))
+        send_message(chat_id,
+            "[ 🤖 ] 9CharnBot \n"
+            "📝 คำสั่ง:\n"
+            "• `/add <วัน> <เวลา> ข้อความ` เพิ่มงาน\n"
+            "• `/list` แสดงรายการของคุณ\n"
+            "• `/remove N` ลบงานลำดับ N\n"
+            "• `/clear` ล้างทั้งหมด\n"
+            "• `/status_list` ตรวจสอบสถานะแจ้งเตือน\n"
+            "📅 วัน: Mon Tue Wed Thu Fri Sat Sun\n"
+            "⏰ เวลา: 24 ชม. รูปแบบ HH:MM\n"
+            "⏳ บอทรีเฟรชทุก 1 วิ"
+        )
 
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 2)
             day_str, time_str, message = parts[0], parts[1], parts[2]
+            if day_str not in DAYS_OF_WEEK:
+                raise ValueError("Invalid day")
 
-            now = datetime.datetime.now(ZoneInfo("Asia/Bangkok"))
-            if day_str == "พรุ่งนี้":
-                next_day = now + datetime.timedelta(days=1)
-            elif day_str == "วันนี้":
-                next_day = now
-            else:
-                send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ใช้ได้แค่ 'วันนี้' หรือ 'พรุ่งนี้'")
-                return
+            current_date = datetime.datetime.now()
+            day_num = DAYS_OF_WEEK.index(day_str)
+            days_to_add = (day_num - current_date.weekday()) % 7
+            next_date = current_date + datetime.timedelta(days=days_to_add)
+            next_day_str = next_date.strftime('%Y-%m-%d')
+            datetime.datetime.strptime(time_str, '%H:%M')
 
-            next_day_str = next_day.strftime('%Y-%m-%d')
             add_schedule(chat_id, f"{next_day_str} {time_str}", message)
             send_message(chat_id, f"[ 🤖 ] 9CharnBot \n✅ เพิ่มงาน: {next_day_str} {time_str} → {message}")
-        except:
-            send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ รูปแบบไม่ถูกต้อง /add [วัน] [เวลา] [ข้อความ]")
+        except Exception as e:
+            send_message(chat_id, f"[ 🤖 ] 9CharnBot : ❌ รูปแบบผิด /add <วัน> <เวลา> ข้อความ\nตัวอย่าง: /add Mon 19:00 ประชุม\nข้อผิดพลาด: {str(e)}")
 
     elif text == '/list':
-        lst = load_schedule(chat_id)
-        if not lst:
-            send_message(chat_id, "[ 🤖 ] 9CharnBot : ไม่มีงานในตาราง")
+        lst = [e for e in load_schedule() if e['chat_id'] == chat_id]
+        if lst:
+            lines = [f"{i+1}. {e['time']} → {e['message']}" for i, e in enumerate(lst)]
+            send_message(chat_id, "[ 🤖 ] 9CharnBot \n📋 ตารางงานของคุณ:\n" + "\n".join(lines))
         else:
-            msg = "[ 🤖 ] 9CharnBot : รายการงาน\n"
-            for i, item in enumerate(lst):
-                msg += f"{i+1}. {item['time']} → {item['message']}\n"
-            send_message(chat_id, msg)
+            send_message(chat_id, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงานของคุณ")
 
     elif text == '/status_list':
-        lst = load_schedule(chat_id)
-        if not lst:
-            send_message(chat_id, "[ 🤖 ] 9CharnBot : ไม่มีงานในตาราง")
+        lst = [e for e in load_schedule() if e['chat_id'] == chat_id]
+        if lst:
+            lines = [f"{i+1}. {e['time']} → {e['message']} ✅" if e.get('notified') else f"{i+1}. {e['time']} → {e['message']} ⏳" for i, e in enumerate(lst)]
+            send_message(chat_id, "[ 🤖 ] 9CharnBot \n⏱️ สถานะแจ้งเตือนของคุณ:\n" + "\n".join(lines))
         else:
-            msg = "[ 🤖 ] 9CharnBot : สถานะแจ้งเตือน\n"
-            for i, item in enumerate(lst):
-                status = "แจ้งแล้ว" if item.get('notified', False) else "ยังไม่แจ้ง"
-                msg += f"{i+1}. {item['time']} → {item['message']} [{status}]\n"
-            send_message(chat_id, msg)
+            send_message(chat_id, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงานของคุณ")
 
     elif text.startswith('/remove '):
         try:
             idx = int(text.split()[1]) - 1
-            lst = load_schedule(chat_id)
-            if 0 <= idx < len(lst):
-                removed = lst.pop(idx)
-                save_schedule(chat_id, lst)
+            lst = load_schedule()
+            user_events = [e for e in lst if e['chat_id'] == chat_id]
+            if 0 <= idx < len(user_events):
+                removed = user_events[idx]
+                lst.remove(removed)
+                save_schedule(lst)
                 send_message(chat_id, f"[ 🤖 ] 9CharnBot \n🗑️ ลบ: {removed['time']} → {removed['message']}")
             else:
                 send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ไม่พบลำดับนั้น")
         except:
-            send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /remove [ลำดับ]")
+            send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /remove N")
 
     elif text == '/clear':
-        save_schedule(chat_id, [])
-        send_message(chat_id, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
+        lst = [e for e in load_schedule() if e['chat_id'] != chat_id]
+        save_schedule(lst)
+        send_message(chat_id, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานของคุณเรียบร้อยแล้ว")
 
-if __name__ == '__main__':
-    Thread(target=check_and_notify, daemon=True).start()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+# ========== Main Loop ==========
+
+version = get_bot_version()
+print(f"🤖 9CharnBot started with version: {version}")
+while True:
+    try:
+        get_updates()
+        check_and_notify()
+
+        # ลบที่แจ้งเตือนแล้ว
+        lst = load_schedule()
+        new_lst = [e for e in lst if not e.get('notified', False)]
+        if len(new_lst) != len(lst):
+            save_schedule(new_lst)
+
+        if (time.time() - START_TIME) / 60 > MAX_RUNTIME_MIN:
+            print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
+            exit()
+
+        time.sleep(1)
+    except Exception as e:
+        print("❌ Error:", e)
+        time.sleep(5)
