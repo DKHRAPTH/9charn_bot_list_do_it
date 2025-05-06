@@ -66,23 +66,13 @@ def add_schedule(day, time_str, message):
 
 def check_and_notify():
     now = datetime.datetime.now(ZoneInfo("Asia/Bangkok"))
-    current_day = now.strftime('%A')  # Monday, Tuesday...
-    thai_days = {
-        'Monday': 'จันทร์',
-        'Tuesday': 'อังคาร',
-        'Wednesday': 'พุธ',
-        'Thursday': 'พฤหัส',
-        'Friday': 'ศุกร์',
-        'Saturday': 'เสาร์',
-        'Sunday': 'อาทิตย์'
-    }
-    today_thai = thai_days[current_day]
+    current_day = now.strftime('%a')  # 'Mon', 'Tue', ...
     current_time = now.strftime('%H:%M')
 
     lst = load_schedule()
     changed = False
     for event in lst:
-        if event['day'] == today_thai and event['time'] == current_time and event['status'] == 'pending' and CHAT_ID:
+        if event['day'] == current_day and event['time'] == current_time and event['status'] == 'pending' and CHAT_ID:
             send_message(CHAT_ID, f"🔔 แจ้งเตือน: {event['message']} ✅ เสร็จแล้ว")
             event['status'] = 'done'
             changed = True
@@ -95,20 +85,20 @@ def handle_message(msg):
     CHAT_ID = msg['chat']['id']
 
     if text == '/start':
-        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add วัน HH:MM ข้อความ` เพิ่มตารางงาน เช่น `/add จันทร์ 08:00 ไปโรงเรียน`\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N\n• `/clear` ลบตารางงานทั้งหมด")
+        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add วัน HH:MM ข้อความ` เพิ่มตารางงาน เช่น `/add Mon 08:00 ไปโรงเรียน`\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N\n• `/clear` ลบตารางงานทั้งหมด\n\n📅 ใช้ตัวย่อวัน: Mon, Tue, Wed, Thu, Fri, Sat, Sun")
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 2)
             if len(parts) < 3:
                 raise ValueError
-            day, t, m = parts[0], parts[1], parts[2]
+            day, t, m = parts[0].capitalize(), parts[1], parts[2]
             datetime.datetime.strptime(t, '%H:%M')
-            if day not in ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์', 'อาทิตย์']:
+            if day not in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']:
                 raise ValueError
             add_schedule(day, t, m)
             send_message(CHAT_ID, f"✅ เพิ่มงาน: {day} {t} → {m}")
         except:
-            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /add วัน HH:MM ข้อความ")
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /add วัน HH:MM ข้อความ โดยวันที่ใช้: Mon Tue Wed Thu Fri Sat Sun")
     elif text == '/list':
         lst = load_schedule()
         if lst:
