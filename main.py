@@ -31,6 +31,26 @@ CHAT_ID = None
 START_TIME = time.time()
 MAX_RUNTIME_MIN = 29400
 
+DAY_MAP = {
+    "1": "จันทร์",
+    "2": "อังคาร",
+    "3": "พุธ",
+    "4": "พฤหัส",
+    "5": "ศุกร์",
+    "6": "เสาร์",
+    "7": "อาทิตย์"
+}
+
+EN_TO_THAI_DAY = {
+    'Monday': '1',
+    'Tuesday': '2',
+    'Wednesday': '3',
+    'Thursday': '4',
+    'Friday': '5',
+    'Saturday': '6',
+    'Sunday': '7'
+}
+
 def get_updates():
     global LAST_UPDATE_ID
     resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
@@ -59,31 +79,21 @@ def save_schedule(lst):
     with open(SCHEDULE_FILE, 'w', encoding='utf-8') as f:
         json.dump(lst, f, ensure_ascii=False)
 
-def add_schedule(day, time_str, message):
+def add_schedule(day_num, time_str, message):
     lst = load_schedule()
-    lst.append({'day': day, 'time': time_str, 'message': message, 'status': 'pending'})
+    lst.append({'day': day_num, 'time': time_str, 'message': message, 'status': 'pending'})
     save_schedule(lst)
 
 def check_and_notify():
     now = datetime.datetime.now(ZoneInfo("Asia/Bangkok"))
-    current_day = now.strftime('%A')  # Monday, Tuesday, ...
+    current_day_en = now.strftime('%A')  # Monday, Tuesday...
+    current_day_num = EN_TO_THAI_DAY[current_day_en]
     current_time = now.strftime('%H:%M')
-
-    day_map = {
-        'Monday': 'Mon',
-        'Tuesday': 'Tue',
-        'Wednesday': 'Wed',
-        'Thursday': 'Thu',
-        'Friday': 'Fri',
-        'Saturday': 'Sat',
-        'Sunday': 'Sun'
-    }
-    today = day_map.get(current_day)
 
     lst = load_schedule()
     changed = False
     for event in lst:
-        if event['day'] == today and event['time'] == current_time and event['status'] == 'pending' and CHAT_ID:
+        if event['day'] == current_day_num and event['time'] == current_time and event['status'] == 'pending' and CHAT_ID:
             send_message(CHAT_ID, f"🔔 แจ้งเตือน: {event['message']} ✅ เสร็จแล้ว")
             event['status'] = 'done'
             changed = True
@@ -96,25 +106,24 @@ def handle_message(msg):
     CHAT_ID = msg['chat']['id']
 
     if text == '/start':
-        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add วัน HH:MM ข้อความ` เช่น `/add Tue 08:00 ไปเรียน`\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N\n• `/clear` ลบตารางงานทั้งหมด\n\nวันแบบย่อที่รองรับ: Mon Tue Wed Thu Fri Sat Sun")
+        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add 1 HH:MM ข้อความ` เพิ่มตารางงาน เช่น `/add 1 08:00 ไปโรงเรียน` (1=จันทร์, 7=อาทิตย์)\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N\n• `/clear` ลบตารางงานทั้งหมด\n\nVr.001")
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 2)
             if len(parts) < 3:
                 raise ValueError
-            day, t, m = parts[0], parts[1], parts[2]
-            datetime.datetime.strptime(t, '%H:%M')
-            valid_days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-            if day not in valid_days:
+            day_num, t, m = parts[0], parts[1], parts[2]
+            if day_num not in DAY_MAP:
                 raise ValueError
-            add_schedule(day, t, m)
-            send_message(CHAT_ID, f"✅ เพิ่มงาน: {day} {t} → {m}")
+            datetime.datetime.strptime(t, '%H:%M')
+            add_schedule(day_num, t, m)
+            send_message(CHAT_ID, f"✅ เพิ่มงาน: {DAY_MAP[day_num]} {t} → {m}")
         except:
-            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /add วัน HH:MM ข้อความ โดยวันที่ใช้: Mon Tue Wed Thu Fri Sat Sun")
+            send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /add วัน(1-7) HH:MM ข้อความ\nเช่น /add 1 08:00 ไปเรียน (1=จันทร์)")
     elif text == '/list':
         lst = load_schedule()
         if lst:
-            lines = [f"{i+1}. {e['day']} {e['time']} → {e['message']} ({'✅' if e.get('status') == 'done' else '⏳'})" for i, e in enumerate(lst)]
+            lines = [f"{i+1}. {DAY_MAP.get(e['day'], e['day'])} {e['time']} → {e['message']} ({'✅' if e.get('status') == 'done' else '⏳'})" for i, e in enumerate(lst)]
             send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📋 ตารางงานมีดังนี้\n" + "\n".join(lines))
         else:
             send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 📭 ยังไม่มีตารางงาน")
@@ -125,7 +134,7 @@ def handle_message(msg):
             if 0 <= idx < len(lst):
                 removed = lst.pop(idx)
                 save_schedule(lst)
-                send_message(CHAT_ID, f"🗑️ ลบ: {removed['day']} {removed['time']} → {removed['message']}")
+                send_message(CHAT_ID, f"🗑️ ลบ: {DAY_MAP.get(removed['day'], removed['day'])} {removed['time']} → {removed['message']}")
             else:
                 send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ไม่พบลำดับนั้น")
         except:
