@@ -3,14 +3,9 @@ import requests
 import time
 import json
 import datetime
+from backports.zoneinfo import ZoneInfo  # สำหรับ Python < 3.9
 from flask import Flask
 import threading
-
-# ========== จัดการ ZoneInfo ตามเวอร์ชัน Python ==========
-try:
-    from zoneinfo import ZoneInfo  # สำหรับ Python >= 3.9
-except ImportError:
-    from backports.zoneinfo import ZoneInfo  # สำหรับ Python < 3.9
 
 # ========== Flask สำหรับ uptime หรือ Railway ==========
 app = Flask('')
@@ -24,9 +19,10 @@ def run_web():
     app.run(host='0.0.0.0', port=port)
 
 threading.Thread(target=run_web, daemon=True).start()
+# ======================================================
 
-# ========== Telegram Bot Config ==========
-TOKEN = os.environ['TOKEN']
+# ========= Telegram Bot Config =========
+TOKEN = os.environ['TOKEN']  # ใส่ token เป็น env บน Railway
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
 SCHEDULE_FILE = 'schedule.json'
@@ -80,7 +76,7 @@ def handle_message(msg):
     CHAT_ID = msg['chat']['id']
 
     if text == '/start':
-        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n`/clear` ลบรายการงานทั้งหมด \n Delay 15 s\n\nvr.004")
+        send_message(CHAT_ID, "        [ 🤖 ] 9CharnBot \n 👋 ยินดีต้อนรับ! บอทตารางงานพร้อมใช้งานแล้ว\n\n📝 ใช้คำสั่ง:\n• `/add HH:MM ข้อความ` เพิ่มตารางงาน\n• `/list` แสดงตารางงานทั้งหมด\n• `/remove N` ลบตารางงานลำดับที่ N \n`/clear` ลบรายการงานทั้งหมด \n Delay 15 s")
     elif text.startswith('/add '):
         try:
             parts = text[5:].split(' ', 1)
@@ -110,23 +106,25 @@ def handle_message(msg):
         except:
             send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : ❌ ใช้รูปแบบ /remove N")
     elif text == '/clear':
-        save_schedule([])
-        send_message(CHAT_ID, "🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
+    save_schedule([])
+    send_message(CHAT_ID, "🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
+
 
 # ========== Loop หลัก ==========
-print("🤖 Bot vr.004 started...")
+print("🤖 Bot started...")
 while True:
     try:
         get_updates()
         check_and_notify()
 
+         # ตรวจสอบเวลา runtime
         runtime_min = (time.time() - START_TIME) / 60
         if runtime_min > MAX_RUNTIME_MIN:
             if CHAT_ID:
                 send_message(CHAT_ID, "[ ⚠️ ] 9CharnBot : ใกล้ถึงขีดจำกัดการใช้งานฟรีของ Railway แล้ว บอทจะปิดตัวเองเพื่อประหยัดเวลา")
             print("⌛ ปิดบอทเพื่อประหยัด Railway hours")
             exit()
-
+            
         time.sleep(5)
     except Exception as e:
         print("❌ Error:", e)
