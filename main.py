@@ -18,7 +18,7 @@ def run_web():
 
 threading.Thread(target=run_web).start()
 
-========== Bot config ==========
+#========== Bot config ==========
 TOKEN = os.environ['TOKEN']
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
@@ -26,10 +26,10 @@ SCHEDULE_FILE = 'schedule.json'
 START_TIME = time.time()
 MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
 
-========== Days of the Week ==========
+#========== Days of the Week ==========
 DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-========== Functions ==========
+#========== Functions ==========
 def get_bot_version():
     try:
         with open('version.txt', 'r', encoding='utf-8') as f:
@@ -203,7 +203,7 @@ def handle_message(msg):
         except:
             send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ข้อความไม่เข้าใจ ลองใช้รูปแบบ <วัน> <เวลา> ข้อความ\nตัวอย่าง: Mon 18:00 ประชุม")
 
-========== Main Loop ==========
+# ========== Main Loop ==========
 version = get_bot_version()
 print(f"🤖 9CharnBot started with version: {version}")
 while True:
