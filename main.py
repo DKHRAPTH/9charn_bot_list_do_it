@@ -31,6 +31,13 @@ MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
 DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 # ========== Functions ==========
+def get_bot_version():
+    try:
+        with open('version.txt', 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except:
+        return "unknown"
+
 def get_updates():
     global LAST_UPDATE_ID
     resp = requests.get(URL + 'getUpdates', params={'offset': LAST_UPDATE_ID + 1})
@@ -140,7 +147,8 @@ def handle_message(msg):
         send_message(CHAT_ID, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานทั้งหมดเรียบร้อยแล้ว")
 
 # ========== Main Loop ==========
-print("🤖 Bot started...")
+version = get_bot_version()
+print(f"🤖 9CharnBot started with version: {version}")
 while True:
     try:
         get_updates()
