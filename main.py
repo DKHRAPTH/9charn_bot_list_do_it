@@ -7,7 +7,7 @@ import threading
 from zoneinfo import ZoneInfo
 from flask import Flask
 
-# ========== Flask Setup ==========
+#========== Flask Setup ==========
 app = Flask('')
 
 @app.route('/')
@@ -19,7 +19,7 @@ def run_web():
 
 threading.Thread(target=run_web).start()
 
-# ========== Bot config ==========
+#========== Bot config ==========
 TOKEN = os.environ['TOKEN']
 URL = f'https://api.telegram.org/bot{TOKEN}/'
 LAST_UPDATE_ID = 0
@@ -27,13 +27,13 @@ SCHEDULE_FILE = 'schedule.json'
 START_TIME = time.time()
 MAX_RUNTIME_MIN = 29400  # 490 ชั่วโมง
 
-# ========== Days of the Week ==========
-DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+#========== Days of the Week ==========
+DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-# ========== Temp State ==========
+#========== Temp State ==========
 user_waiting_for_remove = {}
 
-# ========== Functions ==========
+#========== Functions ==========
 def get_bot_version():
     try:
         with open('version.txt', 'r', encoding='utf-8') as f:
@@ -47,30 +47,28 @@ def get_updates():
     data = resp.json()
     if data.get('ok'):
         for update in data['result']:
-            LAST_UPDATE_ID = update['update_id']
             if 'message' in update:
+                LAST_UPDATE_ID = update['update_id']
                 handle_message(update['message'])
-            elif 'callback_query' in update:
-                handle_callback_query(update['callback_query'])
 
-def send_message(chat_id, text, reply_markup=None):
-    data = {'chat_id': chat_id, 'text': text}
-    if reply_markup:
-        data['reply_markup'] = json.dumps(reply_markup)
-    requests.post(URL + 'sendMessage', data=data)
-
-def answer_callback_query(callback_id, text=''):
-    requests.post(URL + 'answerCallbackQuery', data={'callback_query_id': callback_id, 'text': text})
+def send_message(chat_id, text):
+    requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
 
 def send_start_keyboard(chat_id):
     keyboard = {
         "inline_keyboard": [
-            [{"text": "/add", "callback_data": "add"}, {"text": "/list", "callback_data": "list"}],
-            [{"text": "/remove", "callback_data": "remove"}, {"text": "/clear", "callback_data": "clear"}],
-            [{"text": "/status_list", "callback_data": "status_list"}, {"text": "/help", "callback_data": "help"}]
-        ]
+            [{"text": "/add"}, {"text": "/list"}],
+            [{"text": "/remove"}, {"text": "/clear"}],
+            [{"text": "/status_list"}, {"text": "/help"}]
+        ],
+        "resize_keyboard": True,
+        "one_time_keyboard": False
     }
-    send_message(chat_id, "[ 🤖 ] คำสั่งที่สามารถใช้ได้", reply_markup=keyboard)
+    requests.post(URL + 'sendMessage', data={
+        'chat_id': chat_id,
+        'text': "[ 🤖 ] คำสั่งที่สามารถใช้ได้",
+        'reply_markup': json.dumps(keyboard)
+    })
 
 def load_schedule():
     try:
@@ -106,26 +104,6 @@ def check_and_notify():
     if updated:
         save_schedule(lst)
 
-def handle_callback_query(query):
-    data = query['data']
-    chat_id = query['message']['chat']['id']
-    callback_id = query['id']
-    answer_callback_query(callback_id)
-
-    # แปลง callback_data ไปเป็นคำสั่ง
-    if data == 'add':
-        send_message(chat_id, "[ 🤖 ] กรุณาพิมพ์ในรูปแบบ: <วัน> <เวลา> <ข้อความ>\nตัวอย่าง: Mon 18:00 ประชุมทีม")
-    elif data == 'list':
-        handle_message({'chat': {'id': chat_id}, 'text': '/list'})
-    elif data == 'remove':
-        handle_message({'chat': {'id': chat_id}, 'text': '/remove'})
-    elif data == 'clear':
-        handle_message({'chat': {'id': chat_id}, 'text': '/clear'})
-    elif data == 'status_list':
-        handle_message({'chat': {'id': chat_id}, 'text': '/status_list'})
-    elif data == 'help':
-        handle_message({'chat': {'id': chat_id}, 'text': '/help'})
-
 def handle_message(msg):
     text = msg.get('text', '')
     chat_id = msg['chat']['id']
@@ -154,7 +132,7 @@ def handle_message(msg):
             "[ 🤖 ] 9CharnBot is Running.... \n"
             "👋 ยินดีต้อนรับสู่ 9CharnBot!\n"
             "ตารางงานของคุณพร้อมหรือยัง ผมพร้อมแล้วนะ\n"
-            "พิมพ์หรือกดปุ่ม /help เพื่อดูวิธีใช้งานคำสั่งต่าง ๆ\n\n"
+            "พิมพ์ /help เพื่อดูวิธีใช้งานคำสั่งต่าง ๆ\n\n"
             f"vr. {version}"
         )
         send_start_keyboard(chat_id)
@@ -168,9 +146,8 @@ def handle_message(msg):
             "• `/remove` แล้วพิมพ์หมายเลข\n"
             "• `/clear` ล้างทั้งหมด\n"
             "• `/status_list` ตรวจสอบสถานะแจ้งเตือน\n"
-            "• `/button` แสดงปุ่มคำสั่งทั้งหมด\n" 
-            f"📅 วัน: {DAYS_OF_WEEK}\n"
-            "⏰ เวลา: 24 ชม. รูปแบบ HH:MM เช่น 09:00, 11:10\n"
+            "📅 วัน: Mon Tue Wed Thu Fri Sat Sun\n"
+            "⏰ เวลา: 24 ชม. รูปแบบ HH:MM\n"
             "⏳ บอทรีเฟรชทุก 1 วิ\n"
         )
 
@@ -183,12 +160,14 @@ def handle_message(msg):
             day_str, time_str, message = parts[0], parts[1], parts[2]
             if day_str not in DAYS_OF_WEEK:
                 raise ValueError("Invalid day")
+
             current_date = datetime.datetime.now()
             day_num = DAYS_OF_WEEK.index(day_str)
             days_to_add = (day_num - current_date.weekday()) % 7
             next_date = current_date + datetime.timedelta(days=days_to_add)
             next_day_str = next_date.strftime('%Y-%m-%d')
             datetime.datetime.strptime(time_str, '%H:%M')
+
             add_schedule(chat_id, f"{next_day_str} {time_str}", message)
             send_message(chat_id, f"[ 🤖 ] 9CharnBot \n✅ เพิ่มงาน: {next_day_str} {time_str} → {message}")
         except Exception as e:
@@ -223,8 +202,6 @@ def handle_message(msg):
         lst = [e for e in load_schedule() if e['chat_id'] != chat_id]
         save_schedule(lst)
         send_message(chat_id, "[ 🤖 ] 9CharnBot : 🧹 ล้างตารางงานของคุณเรียบร้อยแล้ว")
-    elif text == '/button':
-        send_start_keyboard(chat_id)
 
     else:
         try:
@@ -237,6 +214,7 @@ def handle_message(msg):
                 next_date = current_date + datetime.timedelta(days=days_to_add)
                 next_day_str = next_date.strftime('%Y-%m-%d')
                 datetime.datetime.strptime(time_str, '%H:%M')
+
                 add_schedule(chat_id, f"{next_day_str} {time_str}", message)
                 send_message(chat_id, f"[ 🤖 ] 9CharnBot \n✅ เพิ่มงาน: {next_day_str} {time_str} → {message}")
             else:
@@ -244,7 +222,7 @@ def handle_message(msg):
         except:
             send_message(chat_id, "[ 🤖 ] 9CharnBot : ❌ ข้อความไม่เข้าใจ ลองใช้รูปแบบ <วัน> <เวลา> ข้อความ\nตัวอย่าง: Mon 18:00 ประชุม")
 
-# ========== Main Loop ==========
+#========== Main Loop ==========
 version = get_bot_version()
 print(f"🤖 9CharnBot started with version: {version}")
 
