@@ -1,5 +1,6 @@
 # 9Charn Bot
 A simple Telegram bot that helps schedule reminders.
+**ใช้Aiในการช่วยอธิบายคำสั่งบอทของTelegram และแก้ไขปัญหาการส่งApi**
 
 ## Requirements
 - Python 3.x
