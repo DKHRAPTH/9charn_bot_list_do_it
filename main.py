@@ -47,12 +47,20 @@ def get_updates():
     data = resp.json()
     if data.get('ok'):
         for update in data['result']:
+            LAST_UPDATE_ID = update['update_id']
             if 'message' in update:
-                LAST_UPDATE_ID = update['update_id']
                 handle_message(update['message'])
+            elif 'callback_query' in update:
+                handle_callback_query(update['callback_query'])
 
-def send_message(chat_id, text):
-    requests.post(URL + 'sendMessage', data={'chat_id': chat_id, 'text': text})
+def send_message(chat_id, text, reply_markup=None):
+    data = {'chat_id': chat_id, 'text': text}
+    if reply_markup:
+        data['reply_markup'] = json.dumps(reply_markup)
+    requests.post(URL + 'sendMessage', data=data)
+
+def answer_callback_query(callback_id, text=''):
+    requests.post(URL + 'answerCallbackQuery', data={'callback_query_id': callback_id, 'text': text})
 
 def send_start_keyboard(chat_id):
     keyboard = {
@@ -62,11 +70,7 @@ def send_start_keyboard(chat_id):
             [{"text": "/status_list", "callback_data": "status_list"}, {"text": "/help", "callback_data": "help"}]
         ]
     }
-    requests.post(URL + 'sendMessage', data={
-        'chat_id': chat_id,
-        'text': "[ 🤖 ] คำสั่งที่สามารถใช้ได้",
-        'reply_markup': json.dumps(keyboard)
-    })
+    send_message(chat_id, "[ 🤖 ] คำสั่งที่สามารถใช้ได้", reply_markup=keyboard)
 
 def load_schedule():
     try:
@@ -101,6 +105,26 @@ def check_and_notify():
             updated = True
     if updated:
         save_schedule(lst)
+
+def handle_callback_query(query):
+    data = query['data']
+    chat_id = query['message']['chat']['id']
+    callback_id = query['id']
+    answer_callback_query(callback_id)
+
+    # แปลง callback_data ไปเป็นคำสั่ง
+    if data == 'add':
+        send_message(chat_id, "[ 🤖 ] กรุณาพิมพ์ในรูปแบบ: <วัน> <เวลา> <ข้อความ>\nตัวอย่าง: Mon 18:00 ประชุมทีม")
+    elif data == 'list':
+        handle_message({'chat': {'id': chat_id}, 'text': '/list'})
+    elif data == 'remove':
+        handle_message({'chat': {'id': chat_id}, 'text': '/remove'})
+    elif data == 'clear':
+        handle_message({'chat': {'id': chat_id}, 'text': '/clear'})
+    elif data == 'status_list':
+        handle_message({'chat': {'id': chat_id}, 'text': '/status_list'})
+    elif data == 'help':
+        handle_message({'chat': {'id': chat_id}, 'text': '/help'})
 
 def handle_message(msg):
     text = msg.get('text', '')
