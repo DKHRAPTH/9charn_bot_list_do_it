@@ -56,7 +56,7 @@ def send_message(chat_id, text):
 
 def send_start_keyboard(chat_id):
     keyboard = {
-        "inline_keyboard": [
+        "keyboard": [
             [{"text": "/add"}, {"text": "/list"}],
             [{"text": "/remove"}, {"text": "/clear"}],
             [{"text": "/status_list"}, {"text": "/help"}]
