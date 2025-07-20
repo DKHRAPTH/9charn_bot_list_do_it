@@ -3,7 +3,7 @@ A simple Telegram bot that helps schedule reminders.
 ใช้Aiในการช่วยอธิบายคำสั่งบอทของTelegram และแก้ไขปัญหาการส่งApi
 
 ## Requirements
-- Python 3.x
+- Flask
 - requests (installed via requirements.txt)
 
 ## How to use
